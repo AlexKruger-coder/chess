@@ -222,5 +222,34 @@ describe('useGame hook', () => {
       expect(result.current.lastMove).toBeNull()
       expect(result.current.isCheckmate).toBe(false)
     })
+
+    it('предоставляет позиции на каждом шаге партии для навигации без изменения текущей партии', () => {
+      const { result } = renderHook(() => useGame())
+
+      act(() => {
+        result.current.makeMove('e2', 'e4')
+        result.current.makeMove('e7', 'e5')
+      })
+
+      expect(result.current.history).toEqual(['e4', 'e5'])
+      expect(result.current.verboseHistory).toHaveLength(2)
+
+      // Начальная позиция (шаг 0)
+      const step0 = result.current.getPositionAtStep(0)
+      expect(step0.lastMove).toBeNull()
+      expect(step0.fen).toBe('rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1')
+
+      // После хода e4 (шаг 1)
+      const step1 = result.current.getPositionAtStep(1)
+      expect(step1.lastMove).toEqual({ from: 'e2', to: 'e4' })
+      expect(step1.san).toBe('e4')
+      expect(step1.fen).toContain('4P3')
+
+      // После хода e5 (шаг 2)
+      const step2 = result.current.getPositionAtStep(2)
+      expect(step2.lastMove).toEqual({ from: 'e7', to: 'e5' })
+      expect(step2.san).toBe('e5')
+      expect(step2.fen).toBe(result.current.fen)
+    })
   })
 })

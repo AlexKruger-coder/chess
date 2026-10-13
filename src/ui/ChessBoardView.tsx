@@ -6,11 +6,19 @@ import { PromotionDialog } from './PromotionDialog'
 interface ChessBoardViewProps {
   game: UseGameReturn
   orientation: 'white' | 'black'
+  isBrowsing?: boolean
+  displayedFen?: string
+  displayedLastMove?: { from: string; to: string } | null
+  isTimeout?: boolean
 }
 
 export const ChessBoardView: FC<ChessBoardViewProps> = ({
   game,
   orientation,
+  isBrowsing = false,
+  displayedFen,
+  displayedLastMove,
+  isTimeout = false,
 }) => {
   const {
     fen,
@@ -35,6 +43,10 @@ export const ChessBoardView: FC<ChessBoardViewProps> = ({
   const lastClickTimeRef = useRef<number>(0)
   const lastClickSquareRef = useRef<string>('')
 
+  const effectiveIsGameOver = isGameOver || isTimeout
+  const effectiveFen = isBrowsing && displayedFen ? displayedFen : fen
+  const effectiveLastMove = isBrowsing ? (displayedLastMove ?? null) : lastMove
+
   const clearSelection = useCallback(() => {
     setSelectedSquare(null)
     setLegalMoveSquares([])
@@ -42,7 +54,8 @@ export const ChessBoardView: FC<ChessBoardViewProps> = ({
 
   const handleSquareSelection = useCallback(
     (square: string) => {
-      if (pendingPromotion) {
+      // В режиме просмотра или завершения партии ходить нельзя
+      if (isBrowsing || effectiveIsGameOver || pendingPromotion) {
         return
       }
 
@@ -58,7 +71,6 @@ export const ChessBoardView: FC<ChessBoardViewProps> = ({
 
       // 1. Если фигура ещё не выбрана
       if (!selectedSquare) {
-        if (isGameOver) return
         const moves = getLegalMoves(square)
         if (moves.length > 0) {
           setSelectedSquare(square)
@@ -98,9 +110,10 @@ export const ChessBoardView: FC<ChessBoardViewProps> = ({
       }
     },
     [
+      isBrowsing,
+      effectiveIsGameOver,
       pendingPromotion,
       selectedSquare,
-      isGameOver,
       getLegalMoves,
       clearSelection,
       legalMoveSquares,
@@ -118,7 +131,7 @@ export const ChessBoardView: FC<ChessBoardViewProps> = ({
       sourceSquare: string
       targetSquare: string | null
     }): boolean => {
-      if (!targetSquare || sourceSquare === targetSquare) {
+      if (isBrowsing || effectiveIsGameOver || !targetSquare || sourceSquare === targetSquare) {
         return false
       }
 
@@ -126,7 +139,6 @@ export const ChessBoardView: FC<ChessBoardViewProps> = ({
       if (isPromotionMove(sourceSquare, targetSquare)) {
         setPendingPromotion({ from: sourceSquare, to: targetSquare })
         clearSelection()
-        // Возвращаем false, чтобы фигура не ставилась до подтверждения выбора в модалке
         return false
       }
 
@@ -136,7 +148,7 @@ export const ChessBoardView: FC<ChessBoardViewProps> = ({
       }
       return success
     },
-    [isPromotionMove, makeMove, clearSelection]
+    [isBrowsing, effectiveIsGameOver, isPromotionMove, makeMove, clearSelection]
   )
 
   const handlePromotionSelect = useCallback(
@@ -157,18 +169,18 @@ export const ChessBoardView: FC<ChessBoardViewProps> = ({
   const squareStyles = useMemo<Record<string, React.CSSProperties>>(() => {
     const styles: Record<string, React.CSSProperties> = {}
 
-    // Подсветка последнего хода
-    if (lastMove) {
-      styles[lastMove.from] = {
+    // Подсветка последнего хода (текущего или исторического)
+    if (effectiveLastMove) {
+      styles[effectiveLastMove.from] = {
         backgroundColor: 'rgba(255, 230, 0, 0.4)',
       }
-      styles[lastMove.to] = {
+      styles[effectiveLastMove.to] = {
         backgroundColor: 'rgba(255, 230, 0, 0.4)',
       }
     }
 
-    // Подсветка короля под шахом
-    if (isCheck) {
+    // Подсветка короля под шахом (только в активной игре)
+    if (!isBrowsing && isCheck) {
       const kingSquare = getKingSquare(turn)
       if (kingSquare) {
         styles[kingSquare] = {
@@ -178,32 +190,31 @@ export const ChessBoardView: FC<ChessBoardViewProps> = ({
       }
     }
 
-    // Подсветка выбранной фигуры
-    if (selectedSquare) {
+    // Подсветка выбранной фигуры и легальных ходов (только в активной игре)
+    if (!isBrowsing && selectedSquare) {
       styles[selectedSquare] = {
         backgroundColor: 'rgba(245, 158, 11, 0.65)',
       }
-    }
 
-    // Подсветка легальных ходов
-    if (selectedSquare && legalMoveSquares.length > 0) {
-      const moves = getLegalMoves(selectedSquare)
-      for (const target of legalMoveSquares) {
-        const move = moves.find((m) => m.to === target)
-        const isCapture = move ? Boolean(move.captured) : false
+      if (legalMoveSquares.length > 0) {
+        const moves = getLegalMoves(selectedSquare)
+        for (const target of legalMoveSquares) {
+          const move = moves.find((m) => m.to === target)
+          const isCapture = move ? Boolean(move.captured) : false
 
-        if (isCapture) {
-          styles[target] = {
-            ...(styles[target] || {}),
-            boxShadow: 'inset 0 0 0 4px rgba(239, 68, 68, 0.85)',
-            cursor: 'pointer',
-          }
-        } else {
-          styles[target] = {
-            ...(styles[target] || {}),
-            background:
-              'radial-gradient(circle, rgba(16, 185, 129, 0.8) 25%, transparent 27%)',
-            cursor: 'pointer',
+          if (isCapture) {
+            styles[target] = {
+              ...(styles[target] || {}),
+              boxShadow: 'inset 0 0 0 4px rgba(239, 68, 68, 0.85)',
+              cursor: 'pointer',
+            }
+          } else {
+            styles[target] = {
+              ...(styles[target] || {}),
+              background:
+                'radial-gradient(circle, rgba(16, 185, 129, 0.8) 25%, transparent 27%)',
+              cursor: 'pointer',
+            }
           }
         }
       }
@@ -211,7 +222,8 @@ export const ChessBoardView: FC<ChessBoardViewProps> = ({
 
     return styles
   }, [
-    lastMove,
+    effectiveLastMove,
+    isBrowsing,
     isCheck,
     getKingSquare,
     turn,
@@ -223,11 +235,11 @@ export const ChessBoardView: FC<ChessBoardViewProps> = ({
   // Конфигурация для react-chessboard v5
   const chessboardOptions = useMemo<ChessboardOptions>(() => {
     return {
-      position: fen,
+      position: effectiveFen,
       boardOrientation: orientation,
-      allowDragging: !isGameOver,
+      allowDragging: !effectiveIsGameOver && !isBrowsing,
       canDragPiece: ({ piece }) =>
-        !isGameOver && piece.pieceType.startsWith(turn),
+        !effectiveIsGameOver && !isBrowsing && piece.pieceType.startsWith(turn),
       onPieceDrop: handlePieceDrop,
       onSquareClick: ({ square }) => handleSquareSelection(square),
       onPieceClick: ({ square }) => {
@@ -245,9 +257,10 @@ export const ChessBoardView: FC<ChessBoardViewProps> = ({
       showAnimations: true,
     }
   }, [
-    fen,
+    effectiveFen,
     orientation,
-    isGameOver,
+    effectiveIsGameOver,
+    isBrowsing,
     turn,
     handlePieceDrop,
     handleSquareSelection,
@@ -260,7 +273,7 @@ export const ChessBoardView: FC<ChessBoardViewProps> = ({
         <Chessboard options={chessboardOptions} />
       </div>
 
-      {pendingPromotion && (
+      {!isBrowsing && pendingPromotion && (
         <PromotionDialog
           color={turn}
           onSelect={handlePromotionSelect}

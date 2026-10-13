@@ -2,9 +2,15 @@ import type { FC } from 'react'
 
 interface MoveHistoryProps {
   history: string[]
+  currentStep?: number | null
+  onSelectMove?: (step: number) => void
 }
 
-export const MoveHistory: FC<MoveHistoryProps> = ({ history }) => {
+export const MoveHistory: FC<MoveHistoryProps> = ({
+  history,
+  currentStep,
+  onSelectMove,
+}) => {
   // Сгруппировать ходы парами: 1. Белые Чёрные
   const movePairs: Array<{ number: number; white: string; black?: string }> = []
   for (let i = 0; i < history.length; i += 2) {
@@ -30,24 +36,49 @@ export const MoveHistory: FC<MoveHistoryProps> = ({ history }) => {
           </p>
         ) : (
           <div className="grid grid-cols-2 sm:grid-cols-3 gap-x-4 gap-y-1">
-            {movePairs.map((pair) => (
-              <div
-                key={pair.number}
-                className="flex items-center gap-1.5 py-0.5 text-xs sm:text-sm"
-              >
-                <span className="text-zinc-400 w-6 text-right font-medium">
-                  {pair.number}.
-                </span>
-                <span className="font-semibold text-zinc-800 dark:text-zinc-100 min-w-8">
-                  {pair.white}
-                </span>
-                {pair.black && (
-                  <span className="font-semibold text-zinc-600 dark:text-zinc-300">
-                    {pair.black}
+            {movePairs.map((pair) => {
+              const whiteStep = (pair.number - 1) * 2 + 1
+              const blackStep = (pair.number - 1) * 2 + 2
+              const isWhiteSelected = currentStep === whiteStep
+              const isBlackSelected = currentStep === blackStep
+
+              return (
+                <div
+                  key={pair.number}
+                  className="flex items-center gap-1.5 py-0.5 text-xs sm:text-sm"
+                >
+                  <span className="text-zinc-400 w-6 text-right font-medium">
+                    {pair.number}.
                   </span>
-                )}
-              </div>
-            ))}
+                  <button
+                    type="button"
+                    onClick={() => onSelectMove?.(whiteStep)}
+                    disabled={!onSelectMove}
+                    className={`font-semibold rounded px-1 min-w-8 text-left transition-colors ${
+                      isWhiteSelected
+                        ? 'bg-amber-200 text-amber-900 dark:bg-amber-900/60 dark:text-amber-100 ring-1 ring-amber-400'
+                        : 'text-zinc-800 dark:text-zinc-100 hover:bg-zinc-100 dark:hover:bg-zinc-700/60'
+                    } ${onSelectMove ? 'cursor-pointer' : ''}`}
+                  >
+                    {pair.white}
+                  </button>
+                  {pair.black && (
+                    <button
+                      type="button"
+                      onClick={() => onSelectMove?.(blackStep)}
+                      disabled={!onSelectMove}
+                      className={`font-semibold rounded px-1 min-w-8 text-left transition-colors ${
+                        isBlackSelected
+                          ? 'bg-amber-200 text-amber-900 dark:bg-amber-900/60 dark:text-amber-100 ring-1 ring-amber-400'
+                          : 'text-zinc-600 dark:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-700/60'
+                      } ${onSelectMove ? 'cursor-pointer' : ''}`}
+                    >
+                      {pair.black}
+                    </button>
+                  )}
+                </div>
+              )
+            })}
           </div>
         )}
       </div>

@@ -8,9 +8,16 @@ export type MoveInput = {
   promotion?: string
 }
 
+export type HistoricalPosition = {
+  fen: string
+  lastMove: { from: string; to: string } | null
+  san?: string
+}
+
 export type UseGameReturn = {
   fen: string
   history: string[]
+  verboseHistory: Move[]
   turn: Color
   status: GameStatus
   lastMove: { from: string; to: string } | null
@@ -29,4 +36,5 @@ export type UseGameReturn = {
   getLegalMoves: (square: string) => Move[]
   isPromotionMove: (from: string, to: string) => boolean
   getKingSquare: (color?: Color) => Square | null
+  getPositionAtStep: (step: number) => HistoricalPosition
 }

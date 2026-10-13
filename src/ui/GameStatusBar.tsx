@@ -6,6 +6,7 @@ interface GameStatusBarProps {
   turn: Color
   status: GameStatus
   winner: Color | null
+  timeOutWinner?: Color | null
   onNewGame: () => void
   orientation: 'white' | 'black'
   onToggleOrientation: () => void
@@ -15,6 +16,7 @@ export const GameStatusBar: FC<GameStatusBarProps> = ({
   turn,
   status,
   winner,
+  timeOutWinner,
   onNewGame,
   orientation,
   onToggleOrientation,
@@ -24,6 +26,15 @@ export const GameStatusBar: FC<GameStatusBarProps> = ({
   const isDraw = status === 'ничья' || status === 'пат'
 
   const getStatusBadge = () => {
+    if (timeOutWinner) {
+      const winnerName = timeOutWinner === 'w' ? 'Белые' : 'Чёрные'
+      return (
+        <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs sm:text-sm font-bold bg-red-100 text-red-800 dark:bg-red-900/60 dark:text-red-200 animate-pulse">
+          ⏰ Время вышло! Победили {winnerName}
+        </span>
+      )
+    }
+
     if (isMate) {
       const winnerName = winner === 'w' ? 'Белые' : 'Чёрные'
       return (

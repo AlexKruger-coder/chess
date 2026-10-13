@@ -1,18 +1,70 @@
-import { useState } from 'react'
-import { useGame } from './game'
-import { ChessBoardView, GameStatusBar, MoveHistory } from './ui'
+import { useEffect, useState } from 'react'
+import { useClock, useGame, type ClockMode } from './game'
+import {
+  ChessBoardView,
+  ChessClock,
+  GameNavigation,
+  GameStatusBar,
+  MoveHistory,
+} from './ui'
 
 function App() {
   const game = useGame()
   const [orientation, setOrientation] = useState<'white' | 'black'>('white')
+  const [viewStep, setViewStep] = useState<number | null>(null)
+
+  const clock = useClock({
+    initialMode: '5+0',
+    turn: game.turn,
+    isGameOver: game.isGameOver,
+    moveCount: game.history.length,
+  })
+
+  // При новом ходе в партии возвращаемся к актуальной позиции
+  useEffect(() => {
+    setViewStep(null)
+  }, [game.history.length])
 
   const toggleOrientation = () => {
     setOrientation((prev) => (prev === 'white' ? 'black' : 'white'))
   }
 
+  const handleNewGame = () => {
+    game.newGame()
+    clock.reset()
+    setViewStep(null)
+  }
+
+  const totalSteps = game.history.length
+  const isBrowsing = viewStep !== null && viewStep < totalSteps
+  const currentStep = viewStep ?? totalSteps
+
+  const historicalPosition = game.getPositionAtStep(currentStep)
+  const displayedFen = isBrowsing ? historicalPosition.fen : game.fen
+  const displayedLastMove = isBrowsing ? historicalPosition.lastMove : game.lastMove
+
+  // Навигация
+  const handleFirst = () => setViewStep(0)
+  const handlePrevious = () =>
+    setViewStep((prev) => Math.max(0, (prev ?? totalSteps) - 1))
+  const handleNext = () =>
+    setViewStep((prev) => {
+      const next = (prev ?? totalSteps) + 1
+      return next >= totalSteps ? null : next
+    })
+  const handleLast = () => setViewStep(null)
+  const handleReturnToLive = () => setViewStep(null)
+  const handleSelectMove = (step: number) => {
+    if (step >= totalSteps) {
+      setViewStep(null)
+    } else {
+      setViewStep(step)
+    }
+  }
+
   return (
     <div className="min-h-screen bg-zinc-100 text-zinc-900 dark:bg-zinc-950 dark:text-zinc-100 flex flex-col items-center p-3 sm:p-6 transition-colors">
-      <header className="w-full max-w-xl flex items-center justify-between mb-3 sm:mb-4 px-1">
+      <header className="w-full max-w-xl flex items-center justify-between mb-3 px-1">
         <div className="flex items-center gap-2">
           <span className="text-2xl sm:text-3xl" role="img" aria-label="Шахматный конь">
             ♞
@@ -33,22 +85,58 @@ function App() {
         </div>
       </header>
 
-      <main className="w-full max-w-xl flex flex-col items-center gap-3 sm:gap-4">
-        {/* Панель статуса и действий над доской */}
+      <main className="w-full max-w-xl flex flex-col items-center gap-3">
+        {/* Панель статуса партии */}
         <GameStatusBar
           turn={game.turn}
           status={game.status}
-          winner={game.winner}
-          onNewGame={() => game.newGame()}
+          winner={clock.timeOutWinner ?? game.winner}
+          timeOutWinner={clock.timeOutWinner}
+          onNewGame={handleNewGame}
           orientation={orientation}
           onToggleOrientation={toggleOrientation}
         />
 
-        {/* Доска */}
-        <ChessBoardView game={game} orientation={orientation} />
+        {/* Шахматные часы и выбор контроля времени */}
+        <ChessClock
+          whiteTime={clock.whiteTime}
+          blackTime={clock.blackTime}
+          turn={game.turn}
+          isRunning={clock.isRunning}
+          mode={clock.mode}
+          onModeChange={(newMode: ClockMode) => clock.setMode(newMode)}
+          timeOutWinner={clock.timeOutWinner}
+          disabled={game.history.length > 0 && clock.isRunning}
+        />
 
-        {/* История ходов */}
-        <MoveHistory history={game.history} />
+        {/* Шахматная доска */}
+        <ChessBoardView
+          game={game}
+          orientation={orientation}
+          isBrowsing={isBrowsing}
+          displayedFen={displayedFen}
+          displayedLastMove={displayedLastMove}
+          isTimeout={Boolean(clock.timeOutWinner)}
+        />
+
+        {/* Навигация по истории партии */}
+        <GameNavigation
+          currentStep={currentStep}
+          totalSteps={totalSteps}
+          isBrowsing={isBrowsing}
+          onFirst={handleFirst}
+          onPrevious={handlePrevious}
+          onNext={handleNext}
+          onLast={handleLast}
+          onReturnToLive={handleReturnToLive}
+        />
+
+        {/* Список ходов */}
+        <MoveHistory
+          history={game.history}
+          currentStep={currentStep}
+          onSelectMove={handleSelectMove}
+        />
       </main>
     </div>
   )

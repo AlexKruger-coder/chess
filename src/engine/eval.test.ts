@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest'
+﻿import { describe, expect, it } from 'vitest'
 import { evalToBarPercent, formatEval } from './eval'
 import type { AnalysisResult } from './stockfish'
 
@@ -33,6 +33,32 @@ describe('evalToBarPercent', () => {
 
   it('is symmetric: f(-x) = 100 - f(x)', () => {
     expect(evalToBarPercent(100)).toBeCloseTo(100 - evalToBarPercent(-100), 5)
+  })
+})
+
+describe('evalToBarPercent game-over scenarios', () => {
+  it('returns 100 for checkmate (extreme positive cp)', () => {
+    expect(evalToBarPercent(10000)).toBe(100)
+  })
+
+  it('returns 0 for opponent checkmate (extreme negative cp)', () => {
+    expect(evalToBarPercent(-10000)).toBe(0)
+  })
+
+  it('returns near 97.5 for near-checkmate (cp = 1000)', () => {
+    expect(evalToBarPercent(1000)).toBeCloseTo(97.5, 1)
+  })
+
+  it('returns near 2.5 for near-checkmate (cp = -1000)', () => {
+    expect(evalToBarPercent(-1000)).toBeCloseTo(2.5, 1)
+  })
+
+  it('clamps to 100 for stalemate-adjacent extreme positive cp', () => {
+    expect(evalToBarPercent(5000)).toBe(100)
+  })
+
+  it('clamps to 0 for stalemate-adjacent extreme negative cp', () => {
+    expect(evalToBarPercent(-5000)).toBe(0)
   })
 })
 
@@ -89,5 +115,37 @@ describe('formatEval', () => {
   it('formats small negative cp as "-0.01"', () => {
     const result: AnalysisResult = { cp: -1, bestMove: 'e2e4' }
     expect(formatEval(result)).toBe('-0.01')
+  })
+})
+
+describe('formatEval game-over scenarios', () => {
+  it('formats checkmate (white wins, mate = 1000)', () => {
+    const result: AnalysisResult = { mate: 1000, bestMove: 'e2e4' }
+    expect(formatEval(result)).toBe('M1')
+  })
+
+  it('formats checkmate (black wins, mate = -1000)', () => {
+    const result: AnalysisResult = { mate: -1000, bestMove: 'e2e4' }
+    expect(formatEval(result)).toBe('M-1')
+  })
+
+  it('formats multi-move mate (white wins, mate = 8000)', () => {
+    const result: AnalysisResult = { mate: 8000, bestMove: 'e2e4' }
+    expect(formatEval(result)).toBe('M8')
+  })
+
+  it('formats multi-move mate (black wins, mate = -8000)', () => {
+    const result: AnalysisResult = { mate: -8000, bestMove: 'e2e4' }
+    expect(formatEval(result)).toBe('M-8')
+  })
+
+  it('formats stalemate as "0.00" (neutral evaluation)', () => {
+    const result: AnalysisResult = { cp: 0, bestMove: 'e2e4' }
+    expect(formatEval(result)).toBe('0.00')
+  })
+
+  it('formats draw as "0.00" (neutral evaluation)', () => {
+    const result: AnalysisResult = { cp: 0, bestMove: 'e2e4' }
+    expect(formatEval(result)).toBe('0.00')
   })
 })

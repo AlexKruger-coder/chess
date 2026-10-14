@@ -4,15 +4,20 @@ interface EvalBarProps {
   percent: number
   label: string
   orientation: 'white' | 'black'
+  className?: string
+  title?: string
 }
 
-export const EvalBar: FC<EvalBarProps> = ({ percent, label, orientation }) => {
+export const EvalBar: FC<EvalBarProps> = ({ percent, label, orientation, className, title }) => {
   const whiteAtTop = orientation === 'black'
   const whiteHeight = `${percent}%`
   const blackHeight = `${100 - percent}%`
 
   return (
-    <div className="relative w-4 sm:w-5 h-full rounded-lg overflow-hidden">
+    <div
+      className={`relative self-stretch w-4 sm:w-5 shrink-0 min-h-[200px] rounded-lg overflow-hidden ${className ?? ''}`}
+      title={title}
+    >
       <div
         className={`absolute left-0 right-0 bg-amber-300 dark:bg-amber-900/60 transition-all duration-300 ${
           whiteAtTop ? 'top-0' : 'bottom-0'

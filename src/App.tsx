@@ -70,11 +70,42 @@ function App() {
     return computeGameStatus(chess)
   }, [displayedFen])
 
-  const evalAnalysis = useEval(displayedFen, 10, !isBrowsing)
+  const isGameOverPosition =
+    positionStatus === 'мат' || positionStatus === 'пат' || positionStatus === 'ничья'
 
-  const evalPercent = evalToBarPercent(evalAnalysis.result?.cp ?? 0)
-  const evalLabel =
-    positionStatus === 'играется' ? formatEval(evalAnalysis.result) : positionStatus
+  const evalAnalysis = useEval(displayedFen, 10, !isGameOverPosition)
+
+  const evalResult = evalAnalysis.result
+
+  let evalPercent: number
+  let evalLabel: string
+  let evalTitle: string | undefined
+
+  if (positionStatus === 'мат') {
+    const chess = new Chess(displayedFen)
+    if (chess.turn() === 'w') {
+      evalPercent = 0
+      evalLabel = '0-1'
+    } else {
+      evalPercent = 100
+      evalLabel = '1-0'
+    }
+  } else if (positionStatus === 'пат' || positionStatus === 'ничья') {
+    evalPercent = 50
+    evalLabel = '1/2'
+  } else {
+    if (evalAnalysis.error) {
+      evalPercent = 50
+      evalLabel = 'n/a'
+      evalTitle = evalAnalysis.error
+    } else if (evalResult === null) {
+      evalPercent = 50
+      evalLabel = '…'
+    } else {
+      evalPercent = evalToBarPercent(evalResult.cp ?? 0)
+      evalLabel = formatEval(evalResult)
+    }
+  }
 
   return (
     <div className="min-h-screen bg-zinc-100 text-zinc-900 dark:bg-zinc-950 dark:text-zinc-100 flex flex-col items-center p-3 sm:p-6 transition-colors">
@@ -124,8 +155,15 @@ function App() {
         />
 
         {/* Шахматная доска и оценка позиции */}
-        <div className="flex gap-3 items-start w-full">
-          <div className="flex-1 min-w-0">
+        <div className="flex items-stretch gap-3 w-full">
+          <EvalBar
+            percent={evalPercent}
+            label={evalLabel}
+            orientation={orientation}
+            className={evalAnalysis.loading && evalResult !== null ? 'opacity-60' : undefined}
+            title={evalTitle}
+          />
+          <div className="flex-1 min-w-0 self-stretch">
             <ChessBoardView
               game={game}
               orientation={orientation}
@@ -135,11 +173,6 @@ function App() {
               isTimeout={Boolean(clock.timeOutWinner)}
             />
           </div>
-          <EvalBar
-            percent={evalPercent}
-            label={evalLabel}
-            orientation={orientation}
-          />
         </div>
 
         {/* Навигация по истории партии */}

@@ -4,6 +4,7 @@ import { StockfishEngine, type AnalysisResult } from './stockfish'
 export interface UseEvalResult {
   result: AnalysisResult | null
   loading: boolean
+  error: string | null
 }
 
 export function useEval(
@@ -13,6 +14,7 @@ export function useEval(
 ): UseEvalResult {
   const [result, setResult] = useState<AnalysisResult | null>(null)
   const [loading, setLoading] = useState<boolean>(false)
+  const [error, setError] = useState<string | null>(null)
 
   const engineRef = useRef<StockfishEngine | null>(null)
   const mountedRef = useRef<boolean>(true)
@@ -20,6 +22,7 @@ export function useEval(
   const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   useEffect(() => {
+    mountedRef.current = true
     return () => {
       mountedRef.current = false
       if (timeoutRef.current !== null) {
@@ -35,13 +38,16 @@ export function useEval(
     if (!enabled) return
 
     currentFenRef.current = fen
+    setError(null)
 
     let engine = engineRef.current
     if (engine === null) {
       try {
         engine = new StockfishEngine()
         engineRef.current = engine
-      } catch {
+      } catch (err) {
+        console.error('Stockfish:', err)
+        setError(String(err))
         return
       }
     }
@@ -60,9 +66,11 @@ export function useEval(
           setResult(analysis)
           setLoading(false)
         })
-        .catch(() => {
+        .catch((err) => {
+          console.error('Stockfish:', err)
           if (!mountedRef.current) return
           if (currentFenRef.current === requestFen) {
+            setError(String(err))
             setLoading(false)
           }
         })
@@ -78,5 +86,5 @@ export function useEval(
     }
   }, [fen, depth, enabled])
 
-  return { result, loading }
+  return { result, loading, error }
 }

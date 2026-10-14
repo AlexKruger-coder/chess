@@ -61,6 +61,11 @@ describe('UCI Parser', () => {
       expect(result!.score.cp).toBe(50)
       expect(result!.pv).toBeUndefined()
     })
+
+    it('игнорирует строки multipv > 1', () => {
+      const line = 'info depth 10 multipv 2 score cp 150 pv e2e4'
+      expect(parseInfoLine(line)).toBeNull()
+    })
   })
 
   describe('parseBestMove', () => {

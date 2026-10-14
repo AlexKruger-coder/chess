@@ -1,8 +1,8 @@
-﻿import { BarChart3 } from 'lucide-react'
+import { BarChart3 } from 'lucide-react'
 import { useEffect, useMemo, useState } from 'react'
 import { Chess } from 'chess.js'
 import { useClock, useGame, computeGameStatus, type ClockMode } from './game'
-import { useEval, evalToBarPercent, formatEval, useGameAnalysis } from './engine'
+import { useEval, evalToBarPercent, formatEval, evalFromResult, useGameAnalysis } from './engine'
 import {
   ChessBoardView,
   ChessClock,
@@ -106,7 +106,7 @@ function App() {
       evalPercent = 50
       evalLabel = '…'
     } else {
-      evalPercent = evalToBarPercent(evalResult.cp ?? 0)
+      evalPercent = evalToBarPercent(evalFromResult(evalResult))
       evalLabel = formatEval(evalResult)
     }
   }

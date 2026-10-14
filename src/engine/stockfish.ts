@@ -24,6 +24,8 @@ export class StockfishEngine {
   private queue: AnalyzeRequest[] = []
   private current: AnalyzeRequest | null = null
   private lastInfo: UciInfoLine | null = null
+  private isSearching = false
+  private stopping = false
 
   constructor() {
     this.worker = new Worker(
@@ -49,35 +51,45 @@ export class StockfishEngine {
       this.processQueue()
       return
     }
-    if (line.startsWith('info ')) {
+    // Only accept info lines for the active search after 'go'
+    if (line.startsWith('info ') && this.isSearching && this.current) {
       const info = parseInfoLine(line)
-      if (info) this.lastInfo = info
+      if (info && info.score && (info.score.cp !== undefined || info.score.mate !== undefined)) {
+        const depth = info.depth ?? 0
+        const prevDepth = this.lastInfo?.depth ?? 0
+        // Take the latest info line with highest depth (multipv 1 is enforced by parseInfoLine)
+        if (!this.lastInfo || depth >= prevDepth) {
+          this.lastInfo = info
+        }
+      }
       return
     }
     const best = parseBestMove(line)
     if (best) {
-      this.resolveCurrent(best.bestMove)
+      if (this.current && this.isSearching) {
+        const req = this.current
+        this.current = null
+        this.isSearching = false
+        this.stopping = false
+        req.resolve(this.buildResult(best.bestMove, req.fen))
+        this.processQueue()
+      } else {
+        this.isSearching = false
+        this.stopping = false
+        this.processQueue()
+      }
     }
   }
 
   private processQueue(): void {
-    if (!this.ready) return
-    if (this.current) return
+    if (!this.ready || this.current || this.isSearching || this.stopping) return
     const req = this.queue.shift()
     if (!req) return
     this.current = req
     this.lastInfo = null
-    this.send('isready')
+    this.isSearching = true
     this.send(`position fen ${req.fen}`)
     this.send(`go depth ${req.depth}`)
-  }
-
-  private resolveCurrent(bestMove: string): void {
-    const req = this.current
-    if (!req) return
-    this.current = null
-    req.resolve(this.buildResult(bestMove, req.fen))
-    this.processQueue()
   }
 
   private turnFromFen(fen: string): 'w' | 'b' {
@@ -107,7 +119,10 @@ export class StockfishEngine {
   }
 
   stop(): void {
-    this.send('stop')
+    if (this.isSearching && !this.stopping) {
+      this.stopping = true
+      this.send('stop')
+    }
   }
 
   destroy(): void {

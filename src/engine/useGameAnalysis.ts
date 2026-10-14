@@ -1,6 +1,7 @@
-﻿import { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { StockfishEngine, type AnalysisResult } from './stockfish'
 import { calculateLoss, classifyMove, type MoveAnalysis } from './classifyMove'
+import { evalFromResult } from './eval'
 import { type UseGameReturn } from '../game'
 import { computeGameStatus } from '../game/useGame'
 import { Chess } from 'chess.js'
@@ -26,6 +27,7 @@ export function useGameAnalysis(
 
   const engineRef = useRef<StockfishEngine | null>(null)
   const abortRef = useRef<boolean>(false)
+  const analyzingRef = useRef<boolean>(false)
 
   const totalMoves = game.history.length
 
@@ -33,6 +35,7 @@ export function useGameAnalysis(
   useEffect(() => {
     return () => {
       abortRef.current = true
+      analyzingRef.current = false
       if (engineRef.current) {
         engineRef.current.destroy()
         engineRef.current = null
@@ -41,8 +44,14 @@ export function useGameAnalysis(
   }, [])
 
   useEffect(() => {
-    if (!start || isAnalyzing) return
+    if (!start) {
+      analyzingRef.current = false
+      abortRef.current = true
+      return
+    }
+    if (analyzingRef.current) return
 
+    analyzingRef.current = true
     abortRef.current = false
     setLoading(true)
     setError(null)
@@ -50,9 +59,19 @@ export function useGameAnalysis(
     setProgress({ current: 0, total: totalMoves + 1 })
     setResults([])
 
-    const evals: { cp: number; bestMove: string | null }[] = []
+    const evals: {
+      fen: string
+      rawCp: number | null
+      rawMate: number | null
+      cp: number
+      bestMove: string | null
+    }[] = []
 
     async function runAnalysis() {
+      const startTime = Date.now()
+      let lastProgressTime = 0
+      const allResults: MoveAnalysis[] = []
+
       try {
         if (!engineRef.current) {
           engineRef.current = new StockfishEngine()
@@ -63,9 +82,15 @@ export function useGameAnalysis(
           if (abortRef.current) return
 
           const pos = game.getPositionAtStep(i)
-          setProgress({ current: i, total: totalMoves + 1 })
+          const now = Date.now()
+          if (now - lastProgressTime >= 100 || i === totalMoves) {
+            lastProgressTime = now
+            setProgress({ current: i, total: totalMoves + 1 })
+          }
 
           let evalCp: number
+          let rawCp: number | null = null
+          let rawMate: number | null = null
           let bestMoveResult: string | null = null
 
           if (i === totalMoves) {
@@ -75,20 +100,32 @@ export function useGameAnalysis(
 
             if (status === 'мат') {
               evalCp = chess.turn() === 'w' ? -1000 : 1000
+              rawMate = chess.turn() === 'w' ? -1 : 1
             } else if (status === 'пат' || status === 'ничья') {
               evalCp = 0
+              rawCp = 0
             } else {
               const analysis: AnalysisResult = await engine.analyze(pos.fen, depth)
-              evalCp = analysis.mate !== undefined ? analysis.mate : (analysis.cp ?? 0)
+              rawCp = analysis.cp ?? null
+              rawMate = analysis.mate ?? null
+              evalCp = evalFromResult(analysis)
               bestMoveResult = analysis.bestMove
             }
           } else {
             const analysis: AnalysisResult = await engine.analyze(pos.fen, depth)
-            evalCp = analysis.mate !== undefined ? analysis.mate : (analysis.cp ?? 0)
+            rawCp = analysis.cp ?? null
+            rawMate = analysis.mate ?? null
+            evalCp = evalFromResult(analysis)
             bestMoveResult = analysis.bestMove
           }
 
-          evals.push({ cp: evalCp, bestMove: bestMoveResult })
+          evals.push({
+            fen: pos.fen,
+            rawCp,
+            rawMate,
+            cp: evalCp,
+            bestMove: bestMoveResult,
+          })
 
           // Classify move i (which led to position i)
           if (i > 0 && game.verboseHistory[i - 1]) {
@@ -107,29 +144,28 @@ export function useGameAnalysis(
               playedUci: playedUci,
             })
 
-            setResults((prev) => {
-              const newResults = [...prev]
-              // Fill gaps
-              for (let j = newResults.length; j < i; j++) {
-                newResults[j] = {} as MoveAnalysis
-              }
-              newResults[i] = {
-                moveNumber: i,
-                san: moveHistory.san,
-                from: moveHistory.from,
-                to: moveHistory.to,
-                promotion: moveHistory.promotion,
-                color: color,
-                prevEval: prevEval,
-                postEval: postEval,
-                bestMove: bestMoveUci ?? undefined,
-                isBestMove: classification === 'best',
-                classification,
-              }
-              return newResults
-            })
+            allResults[i] = {
+              moveNumber: i,
+              san: moveHistory.san,
+              from: moveHistory.from,
+              to: moveHistory.to,
+              promotion: moveHistory.promotion,
+              color: color,
+              prevEval: prevEval,
+              postEval: postEval,
+              bestMove: bestMoveUci ?? undefined,
+              isBestMove: classification === 'best',
+              classification,
+            }
           }
         }
+
+        const elapsed = Date.now() - startTime
+        if (elapsed >= 400 && elapsed < 600) {
+          await new Promise((resolve) => setTimeout(resolve, 600 - elapsed))
+        }
+
+        if (abortRef.current) return
 
         if (typeof window !== 'undefined' && window.location.search.includes('debug=1')) {
           console.table(
@@ -137,24 +173,29 @@ export function useGameAnalysis(
               const move = idx > 0 && game.verboseHistory[idx - 1]
               return {
                 step: idx,
-                cp: ev.cp,
-                bestMove: ev.bestMove,
-                loss: idx > 0 && move
-                  ? calculateLoss(
-                      evals[idx - 1].cp,
-                      ev.cp,
-                      move.color === 'w' ? 'w' : 'b',
-                    )
-                  : null,
-                classification: results[idx]?.classification ?? null,
+                fen: ev.fen,
+                cp: ev.rawCp,
+                mate: ev.rawMate,
+                finalEval: ev.cp,
+                loss:
+                  idx > 0 && move
+                    ? calculateLoss(
+                        evals[idx - 1].cp,
+                        ev.cp,
+                        move.color === 'w' ? 'w' : 'b',
+                      )
+                    : null,
+                class: allResults[idx]?.classification ?? (idx === 0 ? '-' : null),
               }
             }),
           )
         }
 
         setProgress({ current: totalMoves + 1, total: totalMoves + 1 })
+        setResults(allResults)
         setLoading(false)
         setIsAnalyzing(false)
+        analyzingRef.current = false
       } catch (err) {
         console.error('Stockfish:', err)
         if (!abortRef.current) {
@@ -162,11 +203,12 @@ export function useGameAnalysis(
         }
         setLoading(false)
         setIsAnalyzing(false)
+        analyzingRef.current = false
       }
     }
 
     runAnalysis()
-  }, [start, isAnalyzing, totalMoves, depth])
+  }, [start, totalMoves, depth, game])
 
   return {
     results,

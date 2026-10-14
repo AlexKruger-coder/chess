@@ -1,4 +1,4 @@
-﻿import { useMemo, useState, type FC } from 'react'
+import { useEffect, useMemo, useRef, useState, type FC } from 'react'
 import { Chessboard, type ChessboardOptions } from 'react-chessboard'
 import type { UseGameReturn } from '../game'
 import type { UseGameAnalysisResult, MoveAnalysis, MoveClassification } from '../engine'
@@ -43,7 +43,7 @@ const CHART_PLOT_W = CHART_W - CHART_PAD_LEFT - CHART_PAD_RIGHT
 const CHART_PLOT_H = CHART_H - CHART_PAD_TOP - CHART_PAD_BOTTOM
 const Y_TICKS = [-1000, -500, 0, 500, 1000]
 
-type PlayerStats = {
+export type PlayerStats = {
   accuracy: number
   blunders: number
   mistakes: number
@@ -68,7 +68,7 @@ function parseUci(uci: string | null | undefined): { from: string; to: string } 
   return { from: uci.slice(0, 2), to: uci.slice(2, 4) }
 }
 
-function computePlayerStats(results: MoveAnalysis[], color: 'w' | 'b'): PlayerStats {
+export function computePlayerStats(results: MoveAnalysis[], color: 'w' | 'b'): PlayerStats {
   let blunders = 0
   let mistakes = 0
   let inaccuracies = 0
@@ -203,7 +203,7 @@ const PlayerAccuracy: FC<PlayerAccuracyProps> = ({ color, stats }) => {
         </span>
       </div>
       <div className="text-xl sm:text-2xl font-bold text-zinc-900 dark:text-zinc-100">
-        {stats.total > 0 ? `${stats.accuracy}%` : '--'}
+        {stats.total > 0 ? `${stats.accuracy}%` : '—'}
       </div>
       <div className="flex items-center justify-center gap-3 mt-1 text-[10px] text-zinc-600 dark:text-zinc-400">
         <span>?? {stats.blunders}</span>
@@ -266,7 +266,7 @@ const EvalChart: FC<EvalChartProps> = ({ evals, selectedStep, onSelectStep }) =>
                 textAnchor="end"
                 className="fill-zinc-500 dark:fill-zinc-400 text-[9px]"
               >
-                {tick > 0 ? `+${tick}` : String(tick)}
+                {tick === 0 ? '0' : tick > 0 ? `+${tick / 100}` : `${tick / 100}`}
               </text>
             </g>
           )
@@ -344,8 +344,23 @@ const EvalChart: FC<EvalChartProps> = ({ evals, selectedStep, onSelectStep }) =>
           )
         })}
       </svg>
-      <div className="mt-1 text-[10px] text-zinc-500 dark:text-zinc-400 text-center">
-        Ось X: номера ходов · Ось Y: оценка (-1000..+1000)
+      <div className="mt-2 flex flex-wrap items-center justify-center gap-3 text-[10px] text-zinc-600 dark:text-zinc-400">
+        <span className="inline-flex items-center gap-1">
+          <MoveBadge classification="best" />
+          <span>лучший</span>
+        </span>
+        <span className="inline-flex items-center gap-1">
+          <MoveBadge classification="inaccuracy" />
+          <span>?!</span>
+        </span>
+        <span className="inline-flex items-center gap-1">
+          <MoveBadge classification="mistake" />
+          <span>?</span>
+        </span>
+        <span className="inline-flex items-center gap-1">
+          <MoveBadge classification="blunder" />
+          <span>??</span>
+        </span>
       </div>
     </div>
   )
@@ -357,6 +372,27 @@ export const GameAnalysisScreen: FC<GameAnalysisScreenProps> = ({ game, analysis
   const totalMoves = history.length
 
   const [selectedStep, setSelectedStep] = useState<number>(0)
+
+  const isBusy = isAnalyzing || loading
+  const prevBusyRef = useRef(isBusy)
+
+  const firstErrorStep = useMemo(() => {
+    const found = results.find(
+      (r) => r && (r.classification === 'blunder' || r.classification === 'mistake')
+    )
+    return found ? found.moveNumber : null
+  }, [results])
+
+  useEffect(() => {
+    if (prevBusyRef.current && !isBusy && results.length > 0) {
+      if (firstErrorStep !== null) {
+        setSelectedStep(firstErrorStep)
+      } else {
+        setSelectedStep(totalMoves)
+      }
+    }
+    prevBusyRef.current = isBusy
+  }, [isBusy, results, firstErrorStep, totalMoves])
 
   const evals = useMemo(() => {
     const pts = new Array(totalMoves + 1).fill(0)
@@ -467,40 +503,37 @@ export const GameAnalysisScreen: FC<GameAnalysisScreenProps> = ({ game, analysis
         <div className="w-9" />
       </div>
 
-      {(isAnalyzing || loading) && (
-        <div className="flex items-center gap-2.5">
-          <span className="font-medium text-zinc-600 dark:text-zinc-300 whitespace-nowrap">
-            Analyzing... {progress.current} из {progress.total}
-          </span>
-          <div className="flex-1 h-2 rounded bg-zinc-200 dark:bg-zinc-700 overflow-hidden">
-            <div
-              className="h-full rounded bg-amber-500 transition-all"
-              style={{ width: `${progressPct}%` }}
-            />
+      <div className="min-h-[82px] flex items-center w-full">
+        {isBusy ? (
+          <div className="w-full rounded-xl bg-zinc-50 dark:bg-zinc-800/60 border border-zinc-200 dark:border-zinc-700 p-3.5 flex flex-col gap-2">
+            <div className="flex items-center justify-between text-xs sm:text-sm font-medium text-zinc-700 dark:text-zinc-300">
+              <span>Анализ партии… {progress.current} из {progress.total}</span>
+              <span className="font-mono text-xs text-zinc-500">{Math.round(progressPct)}%</span>
+            </div>
+            <div className="w-full h-2 rounded bg-zinc-200 dark:bg-zinc-700 overflow-hidden">
+              <div
+                className="h-full rounded bg-amber-500 transition-all duration-100 ease-out"
+                style={{ width: `${progressPct}%` }}
+              />
+            </div>
           </div>
-        </div>
-      )}
-
-      {error && (
-        <div className="rounded-xl bg-red-50 dark:bg-red-900/40 border border-red-200 dark:border-red-800 text-red-800 dark:text-red-200 px-3 py-2 text-sm">
-          Ошибка анализа: {error}
-        </div>
-      )}
-
-      {!isAnalyzing && !loading && results.length === 0 && !error && (
-        <div className="text-sm text-zinc-500 dark:text-zinc-400 py-4 text-center">
-          {totalMoves === 0
-            ? 'Партия не содержит ходов для анализа.'
-            : 'Анализ не запущен.'}
-        </div>
-      )}
-
-      {!error && results.length > 0 && (
-        <div className="flex flex-col sm:flex-row gap-3">
-          <PlayerAccuracy color="w" stats={whiteStats} />
-          <PlayerAccuracy color="b" stats={blackStats} />
-        </div>
-      )}
+        ) : error ? (
+          <div className="w-full rounded-xl bg-red-50 dark:bg-red-900/40 border border-red-200 dark:border-red-800 text-red-800 dark:text-red-200 px-3 py-2 text-sm">
+            Ошибка анализа: {error}
+          </div>
+        ) : results.length > 0 ? (
+          <div className="w-full flex flex-col sm:flex-row gap-3">
+            <PlayerAccuracy color="w" stats={whiteStats} />
+            <PlayerAccuracy color="b" stats={blackStats} />
+          </div>
+        ) : (
+          <div className="w-full text-sm text-zinc-500 dark:text-zinc-400 py-4 text-center">
+            {totalMoves === 0
+              ? 'Партия не содержит ходов для анализа.'
+              : 'Анализ не запущен.'}
+          </div>
+        )}
+      </div>
 
       <div className="grid grid-cols-1 xl:grid-cols-[340px_1fr] gap-4 items-start">
         <div className="flex flex-col items-center w-full">
@@ -542,17 +575,44 @@ export const GameAnalysisScreen: FC<GameAnalysisScreenProps> = ({ game, analysis
         </div>
 
         <div className="flex flex-col gap-4">
-          <div className="rounded-xl bg-white dark:bg-zinc-800/90 border border-zinc-200 dark:border-zinc-700 p-3">
-            <h3 className="text-xs font-bold uppercase tracking-wider text-zinc-500 dark:text-zinc-400 mb-2">
-              Ходы ({totalMoves})
-            </h3>
-            <MoveList
-              results={results}
-              selectedStep={selectedStep}
-              onSelectStep={handleSelectStep}
-            />
+          <div className="rounded-xl bg-white dark:bg-zinc-800/90 border border-zinc-200 dark:border-zinc-700 p-3 min-h-[220px] flex flex-col">
+            <div className="flex items-center justify-between mb-2">
+              <h3 className="text-xs font-bold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">
+                Ходы ({totalMoves})
+              </h3>
+              {!isBusy && firstErrorStep !== null && (
+                <button
+                  type="button"
+                  onClick={() => handleSelectStep(firstErrorStep)}
+                  className="inline-flex items-center gap-1 px-2 py-0.5 text-xs font-medium rounded-md bg-amber-100 hover:bg-amber-200 dark:bg-amber-900/40 dark:hover:bg-amber-900/60 text-amber-900 dark:text-amber-200 transition cursor-pointer"
+                  title="Перейти к первой ошибке"
+                >
+                  К первой ошибке
+                </button>
+              )}
+            </div>
+            {isBusy ? (
+              <div className="flex-1 flex items-center justify-center text-xs text-zinc-400 italic">
+                Анализ ходов...
+              </div>
+            ) : (
+              <MoveList
+                results={results}
+                selectedStep={selectedStep}
+                onSelectStep={handleSelectStep}
+              />
+            )}
           </div>
-          <EvalChart evals={evals} selectedStep={selectedStep} onSelectStep={handleSelectStep} />
+
+          <div className="min-h-[175px]">
+            {isBusy ? (
+              <div className="w-full h-[175px] rounded-xl bg-zinc-50 dark:bg-zinc-800/60 border border-zinc-200 dark:border-zinc-700 flex items-center justify-center text-xs text-zinc-400 italic">
+                Построение графика оценки...
+              </div>
+            ) : (
+              <EvalChart evals={evals} selectedStep={selectedStep} onSelectStep={handleSelectStep} />
+            )}
+          </div>
         </div>
       </div>
     </section>

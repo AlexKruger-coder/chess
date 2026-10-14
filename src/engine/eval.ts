@@ -1,4 +1,4 @@
-﻿import type { AnalysisResult } from './stockfish'
+import type { AnalysisResult } from './stockfish'
 
 export function evalToBarPercent(cp: number): number {
   const percent = 50 + 50 * (2 / (1 + Math.exp(-0.00368208 * cp)) - 1)
@@ -15,9 +15,22 @@ export function formatEval(result: AnalysisResult | null): string {
     return pawns.toFixed(2)
   }
   if (result.mate !== undefined) {
-    const moves = Math.abs(result.mate / 1000)
+    const rawMoves = Math.abs(result.mate)
+    const moves = rawMoves >= 1000 ? Math.round(rawMoves / 1000) : rawMoves
     const sign = result.mate < 0 ? '-' : ''
     return `M${sign}${moves}`
   }
   return '—'
 }
+
+export function evalFromResult(result: AnalysisResult | null | undefined): number {
+  if (!result) return 0
+  if (result.mate !== undefined) {
+    return result.mate > 0 ? 1000 : result.mate < 0 ? -1000 : 0
+  }
+  if (result.cp !== undefined) {
+    return Math.max(-1000, Math.min(1000, result.cp))
+  }
+  return 0
+}
+

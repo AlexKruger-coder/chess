@@ -30,6 +30,12 @@ export function parseInfoLine(line: string): UciInfoLine | null {
     return null
   }
 
+  // Only consider primary variation (multipv 1, or omitted)
+  const multipvMatch = line.match(/\bmultipv (\d+)/)
+  if (multipvMatch && parseInt(multipvMatch[1], 10) > 1) {
+    return null
+  }
+
   const result: UciInfoLine = { score: {} }
 
   // Parse depth

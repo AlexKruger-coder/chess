@@ -19,17 +19,35 @@ export function useGameAnalysis(
   start: boolean = false,
   depth: number = 12,
 ): UseGameAnalysisResult {
+  const totalMoves = game.history.length
+
   const [results, setResults] = useState<MoveAnalysis[]>([])
-  const [progress, setProgress] = useState<{ current: number; total: number }>({ current: 0, total: 0 })
-  const [loading, setLoading] = useState<boolean>(false)
+  const [progress, setProgress] = useState<{ current: number; total: number }>({
+    current: 0,
+    total: start ? totalMoves + 1 : 0,
+  })
+  const [loading, setLoading] = useState<boolean>(start)
   const [error, setError] = useState<string | null>(null)
-  const [isAnalyzing, setIsAnalyzing] = useState<boolean>(false)
+  const [isAnalyzing, setIsAnalyzing] = useState<boolean>(start)
+
+  const [prevStart, setPrevStart] = useState<boolean>(start)
+  if (start !== prevStart) {
+    setPrevStart(start)
+    if (start) {
+      setIsAnalyzing(true)
+      setLoading(true)
+      setProgress({ current: 0, total: totalMoves + 1 })
+      setResults([])
+      setError(null)
+    } else {
+      setIsAnalyzing(false)
+      setLoading(false)
+    }
+  }
 
   const engineRef = useRef<StockfishEngine | null>(null)
   const abortRef = useRef<boolean>(false)
   const analyzingRef = useRef<boolean>(false)
-
-  const totalMoves = game.history.length
 
   // Cleanup on unmount
   useEffect(() => {

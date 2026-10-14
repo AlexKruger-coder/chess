@@ -185,12 +185,13 @@ const MoveList: FC<MoveListProps> = ({ results, selectedStep, onSelectStep }) =>
 interface PlayerAccuracyProps {
   color: 'w' | 'b'
   stats: PlayerStats
+  isAnalyzing?: boolean
 }
 
-const PlayerAccuracy: FC<PlayerAccuracyProps> = ({ color, stats }) => {
+const PlayerAccuracy: FC<PlayerAccuracyProps> = ({ color, stats, isAnalyzing }) => {
   const isWhite = color === 'w'
   return (
-    <div className="flex-1 rounded-xl bg-zinc-50 dark:bg-zinc-800/60 border border-zinc-200 dark:border-zinc-700 px-3 py-2.5 text-center">
+    <div className="flex-1 rounded-xl bg-zinc-50 dark:bg-zinc-800/60 border border-zinc-200 dark:border-zinc-700 px-3 py-2.5 text-center min-h-[78px] flex flex-col justify-center">
       <div className="flex items-center justify-center gap-1.5 mb-1">
         <span
           className={`h-3 w-3 rounded-full border ${
@@ -202,13 +203,13 @@ const PlayerAccuracy: FC<PlayerAccuracyProps> = ({ color, stats }) => {
           {isWhite ? 'Белые' : 'Чёрные'}
         </span>
       </div>
-      <div className="text-xl sm:text-2xl font-bold text-zinc-900 dark:text-zinc-100">
-        {stats.total > 0 ? `${stats.accuracy}%` : '—'}
+      <div className="text-xl sm:text-2xl font-bold text-zinc-900 dark:text-zinc-100 transition-opacity duration-200">
+        {isAnalyzing || stats.total === 0 ? '—' : `${stats.accuracy}%`}
       </div>
-      <div className="flex items-center justify-center gap-3 mt-1 text-[10px] text-zinc-600 dark:text-zinc-400">
-        <span>?? {stats.blunders}</span>
-        <span>? {stats.mistakes}</span>
-        <span>?! {stats.inaccuracies}</span>
+      <div className="flex items-center justify-center gap-3 mt-1 text-[10px] text-zinc-600 dark:text-zinc-400 transition-opacity duration-200">
+        <span>?? {isAnalyzing ? '—' : stats.blunders}</span>
+        <span>? {isAnalyzing ? '—' : stats.mistakes}</span>
+        <span>?! {isAnalyzing ? '—' : stats.inaccuracies}</span>
       </div>
     </div>
   )
@@ -372,9 +373,21 @@ export const GameAnalysisScreen: FC<GameAnalysisScreenProps> = ({ game, analysis
   const totalMoves = history.length
 
   const [selectedStep, setSelectedStep] = useState<number>(0)
+  const [showProgress, setShowProgress] = useState<boolean>(false)
 
-  const isBusy = isAnalyzing || loading
+  const isBusy = isAnalyzing || loading || (results.length === 0 && !error)
   const prevBusyRef = useRef(isBusy)
+
+  useEffect(() => {
+    if (!isBusy) {
+      setShowProgress(false)
+      return
+    }
+    const timer = setTimeout(() => {
+      setShowProgress(true)
+    }, 400)
+    return () => clearTimeout(timer)
+  }, [isBusy])
 
   const firstErrorStep = useMemo(() => {
     const found = results.find(
@@ -413,11 +426,15 @@ export const GameAnalysisScreen: FC<GameAnalysisScreenProps> = ({ game, analysis
     return move && move.from && move.to ? { from: move.from, to: move.to } : null
   }, [results, selectedStep])
 
-  const handleSelectStep = (step: number) => setSelectedStep(Math.max(0, Math.min(totalMoves, step)))
+  const handleSelectStep = (step: number) => {
+    if (!isBusy) {
+      setSelectedStep(Math.max(0, Math.min(totalMoves, step)))
+    }
+  }
 
   const arrows = useMemo<Array<{ startSquare: string; endSquare: string; color: string }>>(
     () => {
-      if (!bestMoveInfo) return []
+      if (isBusy || !bestMoveInfo) return []
       return [
         {
           startSquare: bestMoveInfo.from,
@@ -426,10 +443,11 @@ export const GameAnalysisScreen: FC<GameAnalysisScreenProps> = ({ game, analysis
         },
       ]
     },
-    [bestMoveInfo]
+    [bestMoveInfo, isBusy]
   )
 
   const squareStyles = useMemo<Record<string, React.CSSProperties>>(() => {
+    if (isBusy) return {}
     const styles: Record<string, React.CSSProperties> = {}
 
     if (lastMoveForStep) {
@@ -455,11 +473,14 @@ export const GameAnalysisScreen: FC<GameAnalysisScreenProps> = ({ game, analysis
     }
 
     return styles
-  }, [bestMoveInfo, lastMoveForStep])
+  }, [bestMoveInfo, lastMoveForStep, isBusy])
+
+  // During analysis, board shows the final position of the game
+  const displayedStep = isBusy ? totalMoves : selectedStep
 
   const chessboardOptions = useMemo<ChessboardOptions>(() => {
     return {
-      position: getPositionAtStep(selectedStep).fen,
+      position: getPositionAtStep(displayedStep).fen,
       boardOrientation: 'white',
       allowDragging: false,
       showAnimations: true,
@@ -473,7 +494,7 @@ export const GameAnalysisScreen: FC<GameAnalysisScreenProps> = ({ game, analysis
       darkSquareStyle: { backgroundColor: '#b58863' },
       lightSquareStyle: { backgroundColor: '#f0d9b5' },
     }
-  }, [getPositionAtStep, selectedStep, squareStyles, arrows])
+  }, [getPositionAtStep, displayedStep, squareStyles, arrows])
 
   const whiteStats = useMemo(() => computePlayerStats(results, 'w'), [results])
   const blackStats = useMemo(() => computePlayerStats(results, 'b'), [results])
@@ -488,7 +509,7 @@ export const GameAnalysisScreen: FC<GameAnalysisScreenProps> = ({ game, analysis
   const progressPct = progress.total > 0 ? (progress.current / progress.total) * 100 : 0
 
   return (
-    <section className="w-full flex flex-col gap-4">
+    <section className="w-full flex flex-col gap-3">
       <div className="flex items-center justify-between">
         <button
           type="button"
@@ -503,36 +524,46 @@ export const GameAnalysisScreen: FC<GameAnalysisScreenProps> = ({ game, analysis
         <div className="w-9" />
       </div>
 
-      <div className="min-h-[82px] flex items-center w-full">
+      {/* Карточки точности всегда присутствуют в каркасе */}
+      <div className="w-full flex flex-col sm:flex-row gap-3">
+        <PlayerAccuracy color="w" stats={whiteStats} isAnalyzing={isBusy} />
+        <PlayerAccuracy color="b" stats={blackStats} isAnalyzing={isBusy} />
+      </div>
+
+      {/* Зарезервированный слот прогресса фиксированной высоты */}
+      <div
+        data-testid="progress-slot"
+        className="h-9 w-full flex items-center overflow-hidden"
+      >
         {isBusy ? (
-          <div className="w-full rounded-xl bg-zinc-50 dark:bg-zinc-800/60 border border-zinc-200 dark:border-zinc-700 p-3.5 flex flex-col gap-2">
-            <div className="flex items-center justify-between text-xs sm:text-sm font-medium text-zinc-700 dark:text-zinc-300">
-              <span>Анализ партии… {progress.current} из {progress.total}</span>
-              <span className="font-mono text-xs text-zinc-500">{Math.round(progressPct)}%</span>
-            </div>
-            <div className="w-full h-2 rounded bg-zinc-200 dark:bg-zinc-700 overflow-hidden">
+          <div
+            data-testid="progress-bar-container"
+            className={`w-full flex items-center gap-3 transition-opacity duration-200 ${
+              showProgress ? 'opacity-100' : 'opacity-0'
+            }`}
+          >
+            <span className="text-xs font-medium text-zinc-600 dark:text-zinc-300 whitespace-nowrap">
+              Анализ партии… {progress.current} из {progress.total}
+            </span>
+            <div className="flex-1 h-2 rounded bg-zinc-200 dark:bg-zinc-700 overflow-hidden">
               <div
+                role="progressbar"
+                aria-valuenow={Math.round(progressPct)}
+                aria-valuemin={0}
+                aria-valuemax={100}
                 className="h-full rounded bg-amber-500 transition-all duration-100 ease-out"
                 style={{ width: `${progressPct}%` }}
               />
             </div>
+            <span className="font-mono text-xs text-zinc-500 w-8 text-right">
+              {Math.round(progressPct)}%
+            </span>
           </div>
         ) : error ? (
-          <div className="w-full rounded-xl bg-red-50 dark:bg-red-900/40 border border-red-200 dark:border-red-800 text-red-800 dark:text-red-200 px-3 py-2 text-sm">
+          <div className="w-full text-xs text-red-600 dark:text-red-400">
             Ошибка анализа: {error}
           </div>
-        ) : results.length > 0 ? (
-          <div className="w-full flex flex-col sm:flex-row gap-3">
-            <PlayerAccuracy color="w" stats={whiteStats} />
-            <PlayerAccuracy color="b" stats={blackStats} />
-          </div>
-        ) : (
-          <div className="w-full text-sm text-zinc-500 dark:text-zinc-400 py-4 text-center">
-            {totalMoves === 0
-              ? 'Партия не содержит ходов для анализа.'
-              : 'Анализ не запущен.'}
-          </div>
-        )}
+        ) : null}
       </div>
 
       <div className="grid grid-cols-1 xl:grid-cols-[340px_1fr] gap-4 items-start">
@@ -541,13 +572,17 @@ export const GameAnalysisScreen: FC<GameAnalysisScreenProps> = ({ game, analysis
             <Chessboard options={chessboardOptions} />
           </div>
 
-          <div className="mt-3 w-full rounded-xl bg-white dark:bg-zinc-800/90 border border-zinc-200 dark:border-zinc-700 p-3 text-center">
-            {selectedStep === 0 ? (
-              <span className="text-xs text-zinc-500 dark:text-zinc-400">
+          <div className="mt-3 w-full rounded-xl bg-white dark:bg-zinc-800/90 border border-zinc-200 dark:border-zinc-700 p-3 text-center min-h-[58px] flex flex-col items-center justify-center">
+            {isBusy ? (
+              <span className="text-xs text-zinc-500 dark:text-zinc-400 font-medium">
+                Анализ…
+              </span>
+            ) : selectedStep === 0 ? (
+              <span className="text-xs text-zinc-500 dark:text-zinc-400 transition-opacity duration-200">
                 Начальная позиция
               </span>
             ) : moveInto?.san ? (
-              <div className="flex flex-col items-center gap-1">
+              <div className="flex flex-col items-center gap-1 transition-opacity duration-200">
                 <div className="flex items-center gap-1.5">
                   <span className="text-sm font-mono text-zinc-900 dark:text-zinc-100">
                     {moveInto.san}
@@ -559,23 +594,22 @@ export const GameAnalysisScreen: FC<GameAnalysisScreenProps> = ({ game, analysis
                 <span className="text-[10px] text-zinc-500 dark:text-zinc-400">
                   Оценка: {fmtEval(moveInto.prevEval)} → {fmtEval(moveInto.postEval)}
                 </span>
+                {bestMoveInfo && (
+                  <span className="block text-[10px] text-zinc-500 dark:text-zinc-400">
+                    Лучший ход: <span className="font-mono">{bestMoveInfo.from}-{bestMoveInfo.to}</span>
+                  </span>
+                )}
               </div>
             ) : (
-              <span className="text-xs text-zinc-500 dark:text-zinc-400">
+              <span className="text-xs text-zinc-500 dark:text-zinc-400 transition-opacity duration-200">
                 Позиция {selectedStep}
-              </span>
-            )}
-
-            {bestMoveInfo && (
-              <span className="block mt-1 text-[10px] text-zinc-500 dark:text-zinc-400">
-                Лучший ход: <span className="font-mono">{bestMoveInfo.from}-{bestMoveInfo.to}</span>
               </span>
             )}
           </div>
         </div>
 
         <div className="flex flex-col gap-4">
-          <div className="rounded-xl bg-white dark:bg-zinc-800/90 border border-zinc-200 dark:border-zinc-700 p-3 min-h-[220px] flex flex-col">
+          <div className="rounded-xl bg-white dark:bg-zinc-800/90 border border-zinc-200 dark:border-zinc-700 p-3 h-[220px] min-h-[220px] flex flex-col">
             <div className="flex items-center justify-between mb-2">
               <h3 className="text-xs font-bold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">
                 Ходы ({totalMoves})
@@ -596,21 +630,25 @@ export const GameAnalysisScreen: FC<GameAnalysisScreenProps> = ({ game, analysis
                 Анализ ходов...
               </div>
             ) : (
-              <MoveList
-                results={results}
-                selectedStep={selectedStep}
-                onSelectStep={handleSelectStep}
-              />
+              <div className="flex-1 overflow-hidden transition-opacity duration-200">
+                <MoveList
+                  results={results}
+                  selectedStep={selectedStep}
+                  onSelectStep={handleSelectStep}
+                />
+              </div>
             )}
           </div>
 
-          <div className="min-h-[175px]">
+          <div className="h-[175px] min-h-[175px]">
             {isBusy ? (
               <div className="w-full h-[175px] rounded-xl bg-zinc-50 dark:bg-zinc-800/60 border border-zinc-200 dark:border-zinc-700 flex items-center justify-center text-xs text-zinc-400 italic">
                 Построение графика оценки...
               </div>
             ) : (
-              <EvalChart evals={evals} selectedStep={selectedStep} onSelectStep={handleSelectStep} />
+              <div className="transition-opacity duration-200">
+                <EvalChart evals={evals} selectedStep={selectedStep} onSelectStep={handleSelectStep} />
+              </div>
             )}
           </div>
         </div>

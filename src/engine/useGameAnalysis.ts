@@ -48,6 +48,14 @@ export function useGameAnalysis(
   const engineRef = useRef<StockfishEngine | null>(null)
   const abortRef = useRef<boolean>(false)
   const analyzingRef = useRef<boolean>(false)
+  // Ключ последней проанализированной партии — чтобы не перезапускать анализ той же партии
+  const analyzedKeyRef = useRef<string | null>(null)
+
+  // useGame() возвращает новый объект на каждый рендер, поэтому НЕ кладём game в зависимости
+  // эффекта (иначе анализ перезапускается бесконечно). Берём актуальный game из ref.
+  const gameRef = useRef(game)
+  gameRef.current = game
+  const historyKey = game.history.join(' ')
 
   // Cleanup on unmount
   useEffect(() => {
@@ -65,12 +73,17 @@ export function useGameAnalysis(
     if (!start) {
       analyzingRef.current = false
       abortRef.current = true
+      analyzedKeyRef.current = null
       return
     }
+    const runKey = `${depth}|${historyKey}`
     if (analyzingRef.current) return
+    if (analyzedKeyRef.current === runKey) return
 
+    analyzedKeyRef.current = runKey
     analyzingRef.current = true
     abortRef.current = false
+    const game = gameRef.current
     setLoading(true)
     setError(null)
     setIsAnalyzing(true)
@@ -226,7 +239,7 @@ export function useGameAnalysis(
     }
 
     runAnalysis()
-  }, [start, totalMoves, depth, game])
+  }, [start, totalMoves, depth, historyKey])
 
   return {
     results,

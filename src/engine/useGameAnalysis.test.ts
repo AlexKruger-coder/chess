@@ -112,4 +112,36 @@ describe('useGameAnalysis', () => {
     const whiteStats = computePlayerStats(result.current.results, 'w')
     expect(whiteStats.blunders).toBe(1)
   })
+
+  it('не перезапускает анализ при перерисовке с новым объектом game (те же ходы)', async () => {
+    const moves = ['f4', 'e5', 'g4', 'Qh4#']
+    mockEngineInstance.analyze.mockResolvedValue({ cp: 0, bestMove: 'e2e4' })
+
+    let hook: any
+    await act(async () => {
+      hook = renderHook(({ g }) => useGameAnalysis(g, true, 12), {
+        initialProps: { g: createMockGame(moves) },
+      })
+    })
+
+    await vi.waitFor(() => {
+      expect(hook.result.current.isAnalyzing).toBe(false)
+      expect(hook.result.current.results.length).toBeGreaterThan(0)
+    })
+
+    const callsAfterFirstRun = mockEngineInstance.analyze.mock.calls.length
+
+    // Имитируем перерисовку App: useGame() возвращает новый объект с теми же ходами
+    for (let k = 0; k < 3; k++) {
+      await act(async () => {
+        hook.rerender({ g: createMockGame(moves) })
+      })
+    }
+    await act(async () => {
+      await new Promise((r) => setTimeout(r, 50))
+    })
+
+    expect(mockEngineInstance.analyze.mock.calls.length).toBe(callsAfterFirstRun)
+    expect(hook.result.current.isAnalyzing).toBe(false)
+  })
 })

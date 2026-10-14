@@ -1,4 +1,4 @@
-export * from './ChessBoardView'
+﻿export * from './ChessBoardView'
 export * from './ChessClock'
 export * from './GameNavigation'
 export * from './GameStatusBar'
@@ -6,3 +6,4 @@ export * from './MoveHistory'
 export * from './PromotionDialog'
 
 export * from './EvalBar'
+export * from './GameAnalysisScreen'

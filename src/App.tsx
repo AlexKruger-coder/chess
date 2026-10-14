@@ -1,7 +1,8 @@
-﻿import { useEffect, useMemo, useState } from 'react'
+﻿import { BarChart3 } from 'lucide-react'
+import { useEffect, useMemo, useState } from 'react'
 import { Chess } from 'chess.js'
 import { useClock, useGame, computeGameStatus, type ClockMode } from './game'
-import { useEval, evalToBarPercent, formatEval } from './engine'
+import { useEval, evalToBarPercent, formatEval, useGameAnalysis } from './engine'
 import {
   ChessBoardView,
   ChessClock,
@@ -9,12 +10,15 @@ import {
   GameNavigation,
   GameStatusBar,
   MoveHistory,
+  GameAnalysisScreen,
 } from './ui'
 
 function App() {
   const game = useGame()
   const [orientation, setOrientation] = useState<'white' | 'black'>('white')
   const [viewStep, setViewStep] = useState<number | null>(null)
+  const [analyzing, setAnalyzing] = useState(false)
+  const analysis = useGameAnalysis(game, analyzing)
 
   const clock = useClock({
     initialMode: '5+0',
@@ -123,71 +127,92 @@ function App() {
             </p>
           </div>
         </div>
+        {game.history.length > 0 && !analyzing && (
+          <button
+            type="button"
+            onClick={() => setAnalyzing(true)}
+            className="inline-flex items-center gap-2 rounded-lg bg-indigo-600 px-3 py-2 text-sm font-medium text-white transition hover:bg-indigo-500"
+            aria-label="Разбор партии"
+          >
+            <BarChart3 className="w-4 h-4" />
+            <span>Разбор партии</span>
+          </button>
+        )}
       </header>
 
       <main className="w-full max-w-xl flex flex-col items-center gap-3">
-        {/* Панель статуса партии */}
-        <GameStatusBar
-          turn={game.turn}
-          status={game.status}
-          winner={clock.timeOutWinner ?? game.winner}
-          timeOutWinner={clock.timeOutWinner}
-          onNewGame={handleNewGame}
-          orientation={orientation}
-          onToggleOrientation={toggleOrientation}
-        />
-
-        {/* Шахматные часы и выбор контроля времени */}
-        <ChessClock
-          whiteTime={clock.whiteTime}
-          blackTime={clock.blackTime}
-          turn={game.turn}
-          isRunning={clock.isRunning}
-          mode={clock.mode}
-          onModeChange={(newMode: ClockMode) => clock.setMode(newMode)}
-          timeOutWinner={clock.timeOutWinner}
-          disabled={game.history.length > 0 && clock.isRunning}
-        />
-
-        {/* Шахматная доска и оценка позиции */}
-        <div className="flex items-stretch gap-3 w-full">
-          <EvalBar
-            percent={evalPercent}
-            label={evalLabel}
-            orientation={orientation}
-            className={evalAnalysis.loading && evalResult !== null ? 'opacity-60' : undefined}
-            title={evalTitle}
+        {analyzing ? (
+          <GameAnalysisScreen
+            game={game}
+            analysis={analysis}
+            onBack={() => setAnalyzing(false)}
           />
-          <div className="flex-1 min-w-0 self-stretch">
-            <ChessBoardView
-              game={game}
+        ) : (
+          <>
+            {/* Панель статуса партии */}
+            <GameStatusBar
+              turn={game.turn}
+              status={game.status}
+              winner={clock.timeOutWinner ?? game.winner}
+              timeOutWinner={clock.timeOutWinner}
+              onNewGame={handleNewGame}
               orientation={orientation}
-              isBrowsing={isBrowsing}
-              displayedFen={displayedFen}
-              displayedLastMove={displayedLastMove}
-              isTimeout={Boolean(clock.timeOutWinner)}
+              onToggleOrientation={toggleOrientation}
             />
-          </div>
-        </div>
 
-        {/* Навигация по истории партии */}
-        <GameNavigation
-          currentStep={currentStep}
-          totalSteps={totalSteps}
-          isBrowsing={isBrowsing}
-          onFirst={handleFirst}
-          onPrevious={handlePrevious}
-          onNext={handleNext}
-          onLast={handleLast}
-          onReturnToLive={handleReturnToLive}
-        />
+            {/* Шахматные часы и выбор контроля времени */}
+            <ChessClock
+              whiteTime={clock.whiteTime}
+              blackTime={clock.blackTime}
+              turn={game.turn}
+              isRunning={clock.isRunning}
+              mode={clock.mode}
+              onModeChange={(newMode: ClockMode) => clock.setMode(newMode)}
+              timeOutWinner={clock.timeOutWinner}
+              disabled={game.history.length > 0 && clock.isRunning}
+            />
 
-        {/* Список ходов */}
-        <MoveHistory
-          history={game.history}
-          currentStep={currentStep}
-          onSelectMove={handleSelectMove}
-        />
+            {/* Шахматная доска и оценка позиции */}
+            <div className="flex items-stretch gap-3 w-full">
+              <EvalBar
+                percent={evalPercent}
+                label={evalLabel}
+                orientation={orientation}
+                className={evalAnalysis.loading && evalResult !== null ? 'opacity-60' : undefined}
+                title={evalTitle}
+              />
+              <div className="flex-1 min-w-0 self-stretch">
+                <ChessBoardView
+                  game={game}
+                  orientation={orientation}
+                  isBrowsing={isBrowsing}
+                  displayedFen={displayedFen}
+                  displayedLastMove={displayedLastMove}
+                  isTimeout={Boolean(clock.timeOutWinner)}
+                />
+              </div>
+            </div>
+
+            {/* Навигация по истории партии */}
+            <GameNavigation
+              currentStep={currentStep}
+              totalSteps={totalSteps}
+              isBrowsing={isBrowsing}
+              onFirst={handleFirst}
+              onPrevious={handlePrevious}
+              onNext={handleNext}
+              onLast={handleLast}
+              onReturnToLive={handleReturnToLive}
+            />
+
+            {/* Список ходов */}
+            <MoveHistory
+              history={game.history}
+              currentStep={currentStep}
+              onSelectMove={handleSelectMove}
+            />
+          </>
+        )}
       </main>
     </div>
   )

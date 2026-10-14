@@ -123,11 +123,6 @@ function App() {
             </p>
           </div>
         </div>
-        <div className="text-right">
-          <span className="text-[11px] font-semibold uppercase tracking-wider px-2.5 py-1 rounded-full bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300 border border-amber-200 dark:border-amber-800">
-            Хакатон
-          </span>
-        </div>
       </header>
 
       <main className="w-full max-w-xl flex flex-col items-center gap-3">

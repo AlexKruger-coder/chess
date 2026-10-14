@@ -1,6 +1,7 @@
-import type { FC } from 'react'
+﻿import type { FC } from 'react'
 import type { Color } from 'chess.js'
 import type { GameStatus } from '../game'
+import { RefreshCw } from 'lucide-react'
 
 interface GameStatusBarProps {
   turn: Color
@@ -136,7 +137,7 @@ export const GameStatusBar: FC<GameStatusBarProps> = ({
             onClick={onNewGame}
             className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-amber-500 hover:bg-amber-600 active:scale-95 text-white font-bold text-xs sm:text-sm shadow-sm transition-all cursor-pointer"
           >
-            <span>🔄</span>
+            <RefreshCw className="w-4 h-4" />
             <span>Новая игра</span>
           </button>
         </div>

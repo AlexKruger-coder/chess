@@ -10,9 +10,14 @@ const { mockEngineInstance } = vi.hoisted(() => ({
   },
 }))
 
-vi.mock('./stockfish', () => ({
-  StockfishEngine: vi.fn(() => mockEngineInstance),
-}))
+vi.mock('./stockfish', () => {
+  class MockStockfishEngine {
+    analyze = mockEngineInstance.analyze
+    stop = mockEngineInstance.stop
+    destroy = mockEngineInstance.destroy
+  }
+  return { StockfishEngine: MockStockfishEngine }
+})
 
 import { useEval } from './useEval'
 
@@ -45,6 +50,9 @@ describe('useEval hook', () => {
 
     await act(async () => {
       rerender({ fen: 'fen2' })
+    })
+
+    await act(async () => {
       vi.advanceTimersByTime(151)
       await Promise.resolve()
       await Promise.resolve()

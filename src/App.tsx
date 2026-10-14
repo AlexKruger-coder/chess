@@ -1,5 +1,6 @@
-import { useEffect, useState } from 'react'
+﻿import { useEffect, useRef, useState } from 'react'
 import { useClock, useGame, type ClockMode } from './game'
+import { StockfishEngine, type AnalysisResult } from './engine'
 import {
   ChessBoardView,
   ChessClock,
@@ -20,10 +21,19 @@ function App() {
     moveCount: game.history.length,
   })
 
+  const [engineResult, setEngineResult] = useState<AnalysisResult | null>(null)
+  const [engineLoading, setEngineLoading] = useState(false)
+  const engineRef = useRef<StockfishEngine | null>(null)
+
   // При новом ходе в партии возвращаемся к актуальной позиции
   useEffect(() => {
     setViewStep(null)
   }, [game.history.length])
+
+  // Очистка движка при размонтировании
+  useEffect(() => {
+    return () => engineRef.current?.destroy()
+  }, [])
 
   const toggleOrientation = () => {
     setOrientation((prev) => (prev === 'white' ? 'black' : 'white'))
@@ -59,6 +69,24 @@ function App() {
       setViewStep(null)
     } else {
       setViewStep(step)
+    }
+  }
+
+  // TODO: Remove temporary Stockfish test button
+  const handleTestStockfish = async () => {
+    let eng = engineRef.current
+    if (!eng) {
+      eng = new StockfishEngine()
+      engineRef.current = eng
+    }
+    setEngineLoading(true)
+    try {
+      const result = await eng.analyze(game.fen, 15)
+      setEngineResult(result)
+    } catch (e) {
+      console.error('Stockfish error:', e)
+    } finally {
+      setEngineLoading(false)
     }
   }
 
@@ -118,6 +146,31 @@ function App() {
           displayedLastMove={displayedLastMove}
           isTimeout={Boolean(clock.timeOutWinner)}
         />
+
+        {/* TODO: Remove temporary Stockfish test button */}
+        <div className="w-full flex flex-col gap-2">
+          <div className="flex items-center gap-3 rounded-xl bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 px-3 sm:px-4 py-2.5 shadow-xs">
+            <button
+              type="button"
+              onClick={handleTestStockfish}
+              disabled={engineLoading}
+              className="flex items-center justify-center gap-1.5 px-3.5 py-1.5 rounded-lg bg-blue-500 hover:bg-blue-600 active:scale-95 text-white font-bold text-xs sm:text-sm shadow-sm transition-all cursor-pointer disabled:opacity-50"
+            >
+              <span>{engineLoading ? '⏳' : '♟'}</span>
+              <span>тест Stockfish</span>
+            </button>
+            {engineResult && (
+              <span className="text-xs sm:text-sm text-zinc-700 dark:text-zinc-300">
+                {engineResult.cp !== undefined
+                  ? `Оценка: ${engineResult.cp > 0 ? '+' : ''}${engineResult.cp} cp`
+                  : engineResult.mate !== undefined
+                    ? `Оценка: Мат ${engineResult.mate > 0 ? '+' : ''}${engineResult.mate / 1000}`
+                    : 'Оценка: —'}
+                {engineResult.bestMove && ` · Лучший ход: ${engineResult.bestMove}`}
+              </span>
+            )}
+          </div>
+        </div>
 
         {/* Навигация по истории партии */}
         <GameNavigation

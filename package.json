@@ -15,7 +15,8 @@
     "chess.js": "1.4.0",
     "react": "19.3.0",
     "react-chessboard": "5.12.1",
-    "react-dom": "19.3.0"
+    "react-dom": "19.3.0",
+    "stockfish": "19.0.1"
   },
   "devDependencies": {
     "@tailwindcss/vite": "4.3.3",

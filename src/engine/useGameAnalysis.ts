@@ -1,6 +1,6 @@
 ﻿import { useEffect, useRef, useState } from 'react'
 import { StockfishEngine, type AnalysisResult } from './stockfish'
-import { classifyMove, type MoveAnalysis } from './classifyMove'
+import { calculateLoss, classifyMove, type MoveAnalysis } from './classifyMove'
 import { type UseGameReturn } from '../game'
 import { computeGameStatus } from '../game/useGame'
 import { Chess } from 'chess.js'
@@ -79,12 +79,12 @@ export function useGameAnalysis(
               evalCp = 0
             } else {
               const analysis: AnalysisResult = await engine.analyze(pos.fen, depth)
-              evalCp = analysis.cp ?? 0
+              evalCp = analysis.mate !== undefined ? analysis.mate : (analysis.cp ?? 0)
               bestMoveResult = analysis.bestMove
             }
           } else {
             const analysis: AnalysisResult = await engine.analyze(pos.fen, depth)
-            evalCp = analysis.cp ?? 0
+            evalCp = analysis.mate !== undefined ? analysis.mate : (analysis.cp ?? 0)
             bestMoveResult = analysis.bestMove
           }
 
@@ -129,6 +129,27 @@ export function useGameAnalysis(
               return newResults
             })
           }
+        }
+
+        if (typeof window !== 'undefined' && window.location.search.includes('debug=1')) {
+          console.table(
+            evals.map((ev, idx) => {
+              const move = idx > 0 && game.verboseHistory[idx - 1]
+              return {
+                step: idx,
+                cp: ev.cp,
+                bestMove: ev.bestMove,
+                loss: idx > 0 && move
+                  ? calculateLoss(
+                      evals[idx - 1].cp,
+                      ev.cp,
+                      move.color === 'w' ? 'w' : 'b',
+                    )
+                  : null,
+                classification: results[idx]?.classification ?? null,
+              }
+            }),
+          )
         }
 
         setProgress({ current: totalMoves + 1, total: totalMoves + 1 })

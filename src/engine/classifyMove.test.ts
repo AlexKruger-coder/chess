@@ -153,6 +153,28 @@ describe('classifyMove', () => {
     })
     expect(result).toBe('best')
   })
+
+  it('mate scenario: blunder into forced mate (1.f4 e5 2.g4 Qh4#)', () => {
+    // After 2.g4, Stockfish finds mate for black: mate = -1000 (from white perspective)
+    const result = classifyMove({
+      prevEval: -50,
+      postEval: -1000,
+      color: 'w',
+      playedUci: 'g2g4',
+    })
+    expect(result).toBe('blunder')
+  })
+
+  it('mate scenario: finding forced mate is brilliant', () => {
+    // Was losing, discovered forced mate
+    const result = classifyMove({
+      prevEval: -300,
+      postEval: 1000,
+      color: 'w',
+      playedUci: 'h4e1',
+    })
+    expect(result).toBe('brilliant')
+  })
 })
 
 describe('calculateLoss', () => {

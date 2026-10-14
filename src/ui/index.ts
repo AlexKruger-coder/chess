@@ -4,3 +4,5 @@ export * from './GameNavigation'
 export * from './GameStatusBar'
 export * from './MoveHistory'
 export * from './PromotionDialog'
+
+export * from './EvalBar'

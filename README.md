@@ -1,32 +1,157 @@
-# React + TypeScript + Vite
+# Chess App
 
-This template provides a minimal setup to get React working in Vite with HMR and some Oxlint rules.
+Веб-приложение для игры в шахматы вдвоём за одним экраном (hotseat) с оценкой позиций в реальном времени и детальным послематчевым разбором партий на движке Stockfish 19 прямо в браузере.
 
-Currently, two official plugins are available:
+🔗 **Демо онлайн**: [https://azyon-chess-2task.vercel.app](https://azyon-chess-2task.vercel.app)
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+---
 
-## React Compiler
+## 🔍 Фишка: «Разбор партии на Stockfish»
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+После завершения партии (мат, пат, сдача, падение флага или ничья) открывается экран глубокого анализа партии.
 
-## Expanding the Oxlint configuration
+### Как это работает:
+1. **Оценка каждой позиции через Web Worker**:
+   - Анализ выполняется с помощью официальной сборки **Stockfish 19 Lite (WASM)** в отдельном потоке браузера (`Web Worker`). Запросы на сервер не отправляются.
+   - Каждый полуход партии анализируется последовательно с фиксированной глубиной `depth 12`.
+   - Оценка позиции нормализуется в диапазоне от `-1000` до `+1000` сантипешек (±10 пешек) с точки зрения белых. Мат кодируется как `+1000` (выигрыш белых) или `-1000` (выигрыш чёрных).
+2. **Расчёт потери в сантипешках (Centipawn Loss)**:
+   - Для каждого хода вычисляется изменение оценки:
+     - Ход белых: $\text{loss} = \text{eval}_{\text{до}} - \text{eval}_{\text{после}}$
+     - Ход чёрных: $\text{loss} = \text{eval}_{\text{после}} - \text{eval}_{\text{до}}$
+3. **Классификация качества ходов**:
+   - `??` **Зевок (Blunder)**: потеря $\ge 300$ cp ($\ge 3.0$ пешки).
+   - `?` **Ошибка (Mistake)**: потеря $\ge 100$ cp ($\ge 1.0$ пешки).
+   - `?!` **Неточность (Inaccuracy)**: потеря $\ge 50$ cp ($\ge 0.5$ пешки).
+   - `♟` **Лучший ход (Best)**: сыгранный ход совпал с ходом `bestmove`, предложенным движком.
+   - `!!` **Блестящий ход (Brilliant)**: сильное улучшение позиции ($\text{loss} \le -300$ cp) при неочевидном решении.
+   - **Хороший ход (Good)**: потеря $< 50$ cp.
+4. **Стрелка лучшего хода**:
+   - На доске отображается зелёная стрелка и подсветка полей для альтернативного лучшего хода, рекомендованного Stockfish.
+5. **Интерактивный график преимущества**:
+   - SVG-график перепада преимущества белых и чёрных от первого до последнего хода.
+   - Вертикальная шкала в пешках (от $-10$ до $+10$).
+   - Кликабельные точки для мгновенного перехода к интересующему ходу.
+   - Легенда значков классификации (`лучший`, `?!`, `?`, `??`).
+6. **Точность игры (Accuracy %)**:
+   - Рассчитывается процент точных ходов для каждого игрока:
+     $$\text{Accuracy} = \frac{\text{Количество ходов (Best + Brilliant + Good)}}{\text{Всего ходов}} \times 100\%$$
+7. **Быстрая навигация**:
+   - По завершении анализа фокус автоматически выставляется на первую допущенную ошибку (`??` или `?`).
+   - Кнопка **«К первой ошибке»** для быстрого возврата к ключевому моменту партии.
 
-If you are developing a production application, we recommend enabling type-aware lint rules by installing `oxlint-tsgolint` and editing `.oxlintrc.json`:
+---
 
-```json
-{
-  "$schema": "./node_modules/oxlint/configuration_schema.json",
-  "plugins": ["react", "typescript", "oxc"],
-  "options": {
-    "typeAware": true
-  },
-  "rules": {
-    "react/rules-of-hooks": "error",
-    "react/only-export-components": ["warn", { "allowConstantExport": true }]
-  }
-}
+## ⚡ Возможности
+
+- **Локальная игра (Hotseat)**: два игрока за одним устройством с передачей хода.
+- **Полная поддержка шахматных правил**: на базе библиотеки `chess.js` (шах, мат, пат, ничья по правилу 50 ходов, троекратное повторение позиции, недостаточность материала).
+- **Шахматные часы**:
+  - Без ограничения времени (`none`)
+  - Блиц: `3+0`, `5+0`
+  - Рапид: `10+0`
+  - Автоматическая фиксация поражения по времени.
+- **Превращение пешек**: модальное окно выбора фигуры (ферзь, ладья, слон, конь).
+- **Переворот доски (Flip board)**: возможность развернуть доску чёрными фигурами вниз.
+- **Интерактивная история ходов**: просмотр ходов в нотации SAN, навигация кнопками («в начало», «назад», «вперёд», «в конец») или прямым кликом по ходу.
+- **Оценочная шкала во время игры (`EvalBar`)**: отображение текущего преимущества по оценке Stockfish (глубина `depth 10`).
+- **Плавный UI экрана разбора**: фиксированный каркас без сдвига вёрстки и прыжков высоты во время вычислений, индикатор прогресса шагов.
+
+---
+
+## 🛠 Стек технологий
+
+- **Фреймворк**: [React 19](https://react.dev/) (v19.3) + [TypeScript](https://www.typescriptlang.org/) (v6.0)
+- **Сборщик**: [Vite 8](https://vitejs.dev/)
+- **Стилизация**: [Tailwind CSS v4](https://tailwindcss.com/)
+- **Шахматная логика**: [chess.js](https://github.com/jhlywa/chess.js) (v1.4)
+- **UI доски**: [react-chessboard](https://github.com/Clariity/react-chessboard) (v5.12)
+- **Движок анализа**: [Stockfish 19](https://github.com/official-stockfish/Stockfish) (WASM, single-threaded lite)
+- **Иконки**: [Lucide React](https://lucide.dev/)
+- **Тестирование**: [Vitest](https://vitest.dev/) + [React Testing Library](https://testing-library.com/) + [jsdom](https://github.com/jsdom/jsdom)
+- **Линтер**: [Oxlint](https://oxc.rs/)
+
+---
+
+## 🚀 Локальный запуск
+
+1. **Клонируйте репозиторий**:
+   ```bash
+   git clone <URL_РЕПОЗИТОРИЯ>
+   cd Chess
+   ```
+
+2. **Установите зависимости**:
+   ```bash
+   npm install
+   ```
+
+3. **Запустите сервер разработки**:
+   ```bash
+   npm run dev
+   ```
+   Приложение откроется по адресу `http://localhost:5173`.
+
+4. **Запуск тестов**:
+   ```bash
+   npm test
+   ```
+
+5. **Сборка для продакшена**:
+   ```bash
+   npm run build
+   ```
+
+---
+
+## 📁 Структура проекта
+
+```
+Chess/
+├── public/
+│   ├── favicon.svg
+│   ├── icons.svg
+│   └── stockfish/
+│       ├── stockfish-19-lite-single.js    # JS-обёртка движка Stockfish
+│       └── stockfish-19-lite-single.wasm  # Скомпилированный WebAssembly бинарник
+├── src/
+│   ├── engine/                            # Взаимодействие со Stockfish
+│   │   ├── classifyMove.ts                # Классификация ходов (?, ??, ?!, best, brilliant)
+│   │   ├── eval.ts                        # Нормализация оценки и форматирование матов
+│   │   ├── stockfish.ts                   # Класс управления UCI-протоколом и Web Worker
+│   │   ├── uciParser.ts                   # Парсинг UCI-ответов (info, depth, score, bestmove)
+│   │   ├── useEval.ts                     # React-хук фоновой оценки текущей позиции
+│   │   └── useGameAnalysis.ts             # React-хук пошагового разбора всей партии
+│   ├── game/                              # Игровая логика
+│   │   ├── types.ts                       # Типы данных (состояния, режимы времени, ходы)
+│   │   ├── useClock.ts                    # React-хук шахматных часов
+│   │   └── useGame.ts                     # React-хук состояния партии (ход, история, chess.js)
+│   ├── ui/                                # Пользовательские компоненты
+│   │   ├── ChessBoardView.tsx             # Отображение доски и drag-and-drop фигур
+│   │   ├── ChessClock.tsx                 # Таймеры игроков
+│   │   ├── EvalBar.tsx                    # Вертикальная полоса преимущества
+│   │   ├── GameAnalysisScreen.tsx         # Экран послематчевого разбора с графиком и карточками
+│   │   ├── GameNavigation.tsx             # Кнопки перемещения по ходам партии
+│   │   ├── GameStatusBar.tsx              # Статус игры (чей ход, шах, результат)
+│   │   ├── MoveHistory.tsx                # Список ходов в нотации SAN
+│   │   └── PromotionDialog.tsx            # Окно выбора фигуры при превращении пешки
+│   ├── test/                              # Конфигурация тестов
+│   │   └── setup.ts                       # Моки для Stockfish Worker и окружения
+│   ├── App.tsx                            # Главный контейнер приложения
+│   ├── main.tsx                           # Точка входа React
+│   └── index.css                          # Глобальные стили (Tailwind CSS)
+├── package.json
+├── tsconfig.json
+└── vite.config.ts
 ```
 
-See the [Oxlint rules documentation](https://oxc.rs/docs/guide/usage/linter/rules) for the full list of rules and categories.
+---
+
+## ⚠️ Ограничения
+
+- **Только локальная игра**: игра ведётся за одним экраном методом передачи очереди (hotseat / pass-and-play). Сетевой мультиплеер по WebSocket не реализован.
+- **Нет игры против бота**: Stockfish используется исключительно как аналитический инструмент (для оценочной шкалы `EvalBar` и послематчевого экрана разбора). Игра в реальном времени против ИИ не предусмотрена.
+- **Производительность зависит от клиентского устройства**: так как Stockfish 19 исполняется в браузере через WebAssembly на процессоре пользователя, время разбора партии зависит от мощности устройства клиента.
+- **Фиксированная глубина анализа**: глубина поиска зафиксирована в коде (`depth 10` для живой оценки во время партии и `depth 12` для послематчевого разбора) и не настраивается пользователем через интерфейс.
+- **Нет импорта/экспорта PGN и FEN**: текущая версия не содержит кнопок и полей ввода для загрузки сторонних партий через PGN или FEN, а также сохранения партии в файл.
+- **Режимы часов без добавления**: шахматные часы поддерживают форматы с фиксированным временем (`3+0`, `5+0`, `10+0`) без инкрементов по Фишеру (нет добавлений секунд за сделанный ход).
